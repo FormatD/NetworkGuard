@@ -1,37 +1,96 @@
-﻿using Serilog;
+﻿using Newtonsoft.Json;
+using Serilog;
 using Serilog.Events;
 using System;
+using System.IO;
 using System.Threading;
 
 namespace NetworkGuard
 {
     class Program
     {
-        private static readonly int CheckIntervalInMs = 60 * 1000;
-        private static readonly int WaitAdapterRecoverTimeInMs = 20 * 1000;
+        private static readonly string ConfigFileName = "config.json";
+        private static string _lastLogFile;
 
-        static void Main(string[] args)
+        static void Main()
         {
-
-            var log = new LoggerConfiguration()
-                .WriteTo.Console(LogEventLevel.Verbose)
-                .WriteTo.RollingFile("log-{Date}.txt")
-                .CreateLogger();
-
+            InitLogger();
 
             while (true)
             {
-                var isOnline = HostChecker.Ping("www.baidu1111w.com");
+                var config = LoadConfig();
+                InitLogger(config.LogFile);
+
+                var isOnline = HostChecker.Ping(config.TestHostName);
+
                 if (isOnline)
-                    Thread.Sleep(CheckIntervalInMs);
+                    Thread.Sleep(config.CheckIntervalInMs);
                 else
                 {
-                    var interfaceName = "以太网";
-                    NetworkAdapterUtil1.Disable(interfaceName);
-                    NetworkAdapterUtil1.Enable(interfaceName);
-                    Thread.Sleep(WaitAdapterRecoverTimeInMs);
+                    NetworkAdapterUtil1.Disable(config.InterfaceName);
+                    NetworkAdapterUtil1.Enable(config.InterfaceName);
+                    Thread.Sleep(config.WaitAdapterRecoverTimeInMs);
                 }
             }
         }
+
+        private static Config LoadConfig()
+        {
+            Config config = null;
+            if (File.Exists(ConfigFileName))
+            {
+                try
+                {
+                    config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(ConfigFileName));
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning("Load config file failed,invalid config,message:{message}", ex.Message);
+                }
+            }
+
+            if (config == null)
+            {
+                config = new Config();
+                Log.Information("Try create default config file.");
+                try
+                {
+                    File.WriteAllText(ConfigFileName, JsonConvert.SerializeObject(config, Formatting.Indented));
+                    Log.Information("Default config file created.");
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning("Create default config failed,message {message}.", ex.Message);
+                }
+            }
+
+            return config;
+        }
+
+        private static void InitLogger(string fileName = null)
+        {
+            if (fileName != null && fileName != _lastLogFile)
+            {
+                _lastLogFile = fileName;
+                var log = new LoggerConfiguration()
+                                .WriteTo.ColoredConsole(LogEventLevel.Verbose)
+                                .WriteTo.RollingFile(fileName ?? new Config().LogFile)
+                                .CreateLogger();
+                Log.Logger = log;
+            }
+        }
+    }
+
+    public class Config
+    {
+        public int CheckIntervalInMs { get; set; } = 60 * 1000;
+
+        public int WaitAdapterRecoverTimeInMs { get; set; } = 20 * 1000;
+
+        public string InterfaceName { get; set; } = "以太网";
+
+        public string TestHostName { get; set; } = "www.baidu.com";
+
+        public string LogFile { get; set; } = "logs\\{Date}.log";
     }
 }

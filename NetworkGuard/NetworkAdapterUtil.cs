@@ -50,20 +50,27 @@ namespace NetworkGuard
 
         private static void ExecuteNetshCommand(string interfaceName, string commandName)
         {
-            Log.Information($"Runing:{interfaceName} {commandName}");
+            Log.Information("Runing:{interfaceName} {commandName}", interfaceName, commandName);
 
-            SelectQuery wmiQuery = new SelectQuery("SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionId != NULL");
-            ManagementObjectSearcher searchProcedure = new ManagementObjectSearcher(wmiQuery);
-            foreach (ManagementObject item in searchProcedure.Get())
+            try
             {
-                var connectionName = (string)item["NetConnectionId"];
-                Log.Information($"found interface:{connectionName}");
-
-                if (connectionName == interfaceName)
+                SelectQuery wmiQuery = new SelectQuery("SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionId != NULL");
+                ManagementObjectSearcher searchProcedure = new ManagementObjectSearcher(wmiQuery);
+                foreach (ManagementObject item in searchProcedure.Get())
                 {
-                    Console.WriteLine($"Executing:{commandName} on {interfaceName}");
-                    item.InvokeMethod(commandName, null);
+                    var connectionName = (string)item["NetConnectionId"];
+                    Log.Debug("found interface:{connectionName}", connectionName);
+
+                    if (connectionName == interfaceName)
+                    {
+                        Log.Debug("Executing:{commandName} on {interfaceName}", commandName, interfaceName);
+                        item.InvokeMethod(commandName, null);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("Executing failed,message", ex.Message);
             }
         }
     }
